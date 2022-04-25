@@ -79,7 +79,7 @@ int register_browser(int browser_socket_fd);
 // processing the message received,
 // broadcasting the update to all browsers with the same session ID,
 // and backing up the session on the disk.
-void browser_handler(int browser_socket_fd);
+void *browser_handler(void *browser_socket_fd);
 
 // Starts the server.
 // Sets up the connection,
@@ -155,7 +155,8 @@ bool process_message(int session_id, const char message[]) {
     double second_value;
 
     // TODO: For Part 3.1, write code to determine if the input is invalid and return false if it is.
-    // Hint: Also need to check if the given variable does exist (i.e., it has been assigned with some value)
+    // Hint: Also need to check if the given
+    if (!isalpha(token[0])) {printf("variable not alphabetic\n"); return false;} variable does exist (i.e., it has been assigned with some value)
     // for the first variable and the second variable, respectively.
 
     // Makes a copy of the string since strtok() will modify the string that it is processing.
@@ -164,16 +165,24 @@ bool process_message(int session_id, const char message[]) {
 
     // Processes the result variable.
     token = strtok(data, " ");
+    if (token == NULL) {printf("first token null"); return false;}
+    if (strlen(token) > 1) {printf("too big\n"); return false;}
+    if (!isalpha(token[0])) {printf("variable not alphabetic\n"); return false;}
     result_idx = token[0] - 'a';
 
     // Processes "=".
     token = strtok(NULL, " ");
+    if (token == NULL) {printf("no = (1)\n"); return false;}
+    if (strcmp(token,"=") != 0) {printf("no = (2)\n"); return false;}
 
     // Processes the first variable/value.
     token = strtok(NULL, " ");
+    if (token == NULL) {return false;}
     if (is_str_numeric(token)) {
         first_value = strtod(token, NULL);
-    } else {
+    } else if (strlen(token) > 1) {printf("too big\n"); return false;}
+    else if (!isalpha(token[0])) {printf("variable not alphabetic\n"); return false;}
+    else {
         int first_idx = token[0] - 'a';
         first_value = session_list[session_id].values[first_idx];
     }
@@ -185,19 +194,26 @@ bool process_message(int session_id, const char message[]) {
         session_list[session_id].values[result_idx] = first_value;
         return true;
     }
+    if (strlen(token) > 1) {printf("too big\n"); return false;}
+    
     symbol = token[0];
 
     // Processes the second variable/value.
     token = strtok(NULL, " ");
+    if (token == NULL) {printf("second variable/value null\n");return false;}
     if (is_str_numeric(token)) {
         second_value = strtod(token, NULL);
-    } else {
+    } else if (strlen(token) > 1) {printf("too big\n"); return false;}
+    else if (!isalpha(token[0])) {printf("variable not alphabetic\n"); return false;}
+    else {
         int second_idx = token[0] - 'a';
         second_value = session_list[session_id].values[second_idx];
     }
 
     // No data should be left over thereafter.
     token = strtok(NULL, " ");
+    if (token != NULL) {printf("too many things\n"); return false;}
+
 
     session_list[session_id].variables[result_idx] = true;
 
@@ -209,7 +225,7 @@ bool process_message(int session_id, const char message[]) {
         session_list[session_id].values[result_idx] = first_value * second_value;
     } else if (symbol == '/') {
         session_list[session_id].values[result_idx] = first_value / second_value;
-    }
+    } else {printf("not a valid operator\n"); return false;}
 
     return true;
 }
@@ -245,6 +261,22 @@ void load_all_sessions() {
     // TODO: For Part 1.1, write your file operation code here.
     // Hint: Use get_session_file_path() to get the file path for each session.
     //       Don't forget to load all of sessions on the disk.
+    //max_sessions = 128
+    printf("loading\n");
+    for (int i=0;i<128;i++) {
+        char path[80];
+        get_session_file_path(i, path);
+        FILE * fp = fopen(path+2, "r");
+        if (fp != NULL) {
+            printf("%d exists on disk\n", i);
+            fread(&session_list[i], sizeof(struct session_struct), 1, fp);
+            fclose(fp);
+            for (int j=0;j<sizeof(session_list[i].values) / sizeof(session_list[i].values[0]);j++) {
+                if (session_list[i].variables[j])
+                    printf("loaded value %d for %d: %f\n", j, i, session_list[i].values[j]);
+            }
+        }
+    }
 }
 
 /**
@@ -255,6 +287,18 @@ void load_all_sessions() {
 void save_session(int session_id) {
     // TODO: For Part 1.1, write your file operation code here.
     // Hint: Use get_session_file_path() to get the file path for each session.
+    printf("saving session\n");
+    char path[80];
+    get_session_file_path(session_id, path);
+    FILE *fp = fopen(path+2, "w");
+    if (fp == NULL ) {
+        fprintf(stderr, "Couldn't open %s\n", path+2);
+        exit(1);
+    }
+    // //fputs(session_data, fp);
+    fwrite(&session_list[session_id], sizeof(session_list[session_id]), 1, fp);
+    fclose(fp);
+    printf("placed data\n");
 }
 
 /**
@@ -308,7 +352,10 @@ int register_browser(int browser_socket_fd) {
  *
  * @param browser_socket_fd the socket file descriptor of the browser connected
  */
-void browser_handler(int browser_socket_fd) {
+void *browser_handler(void *b_socket_fd) {
+    int browser_socket_fd = *((int *) b_socket_fd);
+    // free(b_socket_fd);
+
     int browser_id;
 
     browser_id = register_browser(browser_socket_fd);
@@ -341,6 +388,10 @@ void browser_handler(int browser_socket_fd) {
         bool data_valid = process_message(session_id, message);
         if (!data_valid) {
             // TODO: For Part 3.1, add code here to send the error message to the browser.
+            printf("Invalid input!\n");
+
+            broadcast(session_id, "Invalid input!\n");
+
             continue;
         }
 
@@ -389,15 +440,17 @@ void start_server(int port) {
     while (true) {
         struct sockaddr_in browser_address;
         socklen_t browser_address_len = sizeof(browser_address);
-        int browser_socket_fd = accept(server_socket_fd, (struct sockaddr *) &browser_address, &browser_address_len);
-        if ((browser_socket_fd) < 0) {
+        int *browser_socket_fd = accept(server_socket_fd, (struct sockaddr *) &browser_address, &browser_address_len);
+        if ((&browser_socket_fd) < 0) {
             perror("Socket accept failed");
             continue;
         }
 
         // Starts the handler thread for the new browser.
         // TODO: For Part 2.1, creat a thread to run browser_handler() here.
-        browser_handler(browser_socket_fd);
+        pthread_t thread_id;
+        pthread_create(&thread_id, NULL, browser_handler, (void *) &browser_socket_fd);
+        // browser_handler(browser_socket_fd);
     }
 
     // Closes the socket.

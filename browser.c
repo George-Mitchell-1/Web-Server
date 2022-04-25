@@ -48,7 +48,7 @@ void register_server();
 
 // Listens to the server.
 // Keeps receiving and printing the messages from the server.
-void server_listener();
+void *server_listener();
 
 // Starts the browser.
 // Sets up the connection, start the listener thread,
@@ -81,6 +81,13 @@ void load_cookie() {
     // TODO: For Part 1.2, write your file operation code here.
     // Hint: The file path of the cookie is stored in COOKIE_PATH.
     session_id = -1; // You may move this line to anywhere inside this fucntion.
+    FILE * fp = fopen(COOKIE_PATH, "r");
+    if (fp != NULL) {
+        printf("cookie exists on disk\n");
+        fread(&session_id, sizeof(session_id), 1, fp);
+        fclose(fp);
+        printf("loaded cookie for session id: %d\n", session_id);
+    }
 }
 
 /**
@@ -89,6 +96,16 @@ void load_cookie() {
 void save_cookie() {
     // TODO: For Part 1.2, write your file operation code here.
     // Hint: The file path of the cookie is stored in COOKIE_PATH.
+    printf("saving cookie for session id: %d\n", session_id);
+    FILE *fp = fopen(COOKIE_PATH, "w");
+    if (fp == NULL ) {
+        fprintf(stderr, "Couldn't open %s\n", COOKIE_PATH);
+        exit(1);
+    }
+    // //fputs(session_data, fp);
+    fwrite(&session_id, sizeof(int), 1, fp);
+    fclose(fp);
+    printf("placed data\n");
 }
 
 /**
@@ -106,20 +123,21 @@ void register_server() {
 /**
  * Listens to the server; keeps receiving and printing the messages from the server.
  */
-void server_listener() {
+void *server_listener() {
     // TODO: For Part 2.3, uncomment the loop code that was commented out
     //  when you are done with multithreading.
 
-    // while (browser_on) {
+    while (browser_on) {
 
     char message[BUFFER_LEN];
     receive_message(server_socket_fd, message);
 
     // TODO: For Part 3.1, add code here to print the error message.
+    //no need, i just use the sent message
 
     puts(message);
 
-    //}
+    }
 }
 
 /**
@@ -160,6 +178,9 @@ void start_browser(const char host_ip[], int port) {
     save_cookie();
 
     // Main loop to read in the user's input and send it out.
+    pthread_t thread_id;
+    pthread_create(&thread_id, NULL, server_listener, NULL);
+    // server_listener();
     while (browser_on) {
         char message[BUFFER_LEN];
         read_user_input(message);
@@ -169,8 +190,9 @@ void start_browser(const char host_ip[], int port) {
         // TODO: For Part 2.3, move server_listener() out of the loop and
         //  creat a thread to run it.
         // Hint: Should we place server_listener() before or after the loop?
-        server_listener();
+        // server_listener();
     }
+    // pthread_create(&thread_id, NULL, server_listener, NULL);
 
     // Closes the socket.
     close(server_socket_fd);
