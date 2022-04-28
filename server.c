@@ -24,6 +24,8 @@
 #include <sys/stat.h>
 #include <netinet/in.h>
 
+#include <search.h>
+
 #define NUM_VARIABLES 26
 #define NUM_SESSIONS 128
 #define NUM_BROWSER 128
@@ -42,8 +44,13 @@ typedef struct session_struct {
     double values[NUM_VARIABLES];
 } session_t;
 
+
+
 static browser_t browser_list[NUM_BROWSER];                             // Stores the information of all browsers.
 // TODO: For Part 3.2, convert the session_list to a simple hashmap/dictionary.
+ENTRY e;
+ENTRY *ep;
+
 static session_t session_list[NUM_SESSIONS];                            // Stores the information of all sessions.
 static pthread_mutex_t browser_list_mutex = PTHREAD_MUTEX_INITIALIZER;  // A mutex lock for the browser list.
 static pthread_mutex_t session_list_mutex = PTHREAD_MUTEX_INITIALIZER;  // A mutex lock for the session list.
@@ -87,6 +94,27 @@ void *browser_handler(void *browser_socket_fd);
 // and creates handlers for them.
 void start_server(int port);
 
+//3.2
+//https://man7.org/linux/man-pages/man3/hsearch.3.html
+session_t get_session(int session_id);
+
+session_t get_session(int session_id) {
+    session_t session;
+    e.key = (char *)session_id;
+    ep = hsearch(e, FIND);
+    if (ep) {
+        // printf(ep);
+        // session.in_use = ep->data->in_use;
+        // session.variables = ep->data->variables;
+        // session.values = ep->data->values;
+    } else {
+        // printf("Failed to find session\n");
+        session_t empty;
+        return empty;
+    }
+    return session;
+}
+
 /**
  * Returns the string format of the given session.
  * There will be always 9 digits in the output string.
@@ -97,6 +125,9 @@ void start_server(int port);
  */
 void session_to_str(int session_id, char result[]) {
     memset(result, 0, BUFFER_LEN);
+    //3.2
+    // session_t session = get_session(session_id);
+    
     session_t session = session_list[session_id];
 
     for (int i = 0; i < NUM_VARIABLES; ++i) {
@@ -156,7 +187,7 @@ bool process_message(int session_id, const char message[]) {
 
     // TODO: For Part 3.1, write code to determine if the input is invalid and return false if it is.
     // Hint: Also need to check if the given
-    if (!isalpha(token[0])) {printf("variable not alphabetic\n"); return false;} variable does exist (i.e., it has been assigned with some value)
+    //variable does exist (i.e., it has been assigned with some value)
     // for the first variable and the second variable, respectively.
 
     // Makes a copy of the string since strtok() will modify the string that it is processing.
@@ -165,67 +196,89 @@ bool process_message(int session_id, const char message[]) {
 
     // Processes the result variable.
     token = strtok(data, " ");
-    if (token == NULL) {printf("first token null"); return false;}
-    if (strlen(token) > 1) {printf("too big\n"); return false;}
-    if (!isalpha(token[0])) {printf("variable not alphabetic\n"); return false;}
+    if (token == NULL) {/*printf("first token null"); */return false;}
+    if (strlen(token) > 1) {/*printf("too big\n"); */return false;}
+    if (!isalpha(token[0])) {/*printf("variable not alphabetic\n"); */return false;}
     result_idx = token[0] - 'a';
 
     // Processes "=".
     token = strtok(NULL, " ");
-    if (token == NULL) {printf("no = (1)\n"); return false;}
-    if (strcmp(token,"=") != 0) {printf("no = (2)\n"); return false;}
+    if (token == NULL) {/*printf("no = (1)\n"); */return false;}
+    if (strcmp(token,"=") != 0) {/*printf("no = (2)\n"); */return false;}
 
     // Processes the first variable/value.
     token = strtok(NULL, " ");
     if (token == NULL) {return false;}
     if (is_str_numeric(token)) {
         first_value = strtod(token, NULL);
-    } else if (strlen(token) > 1) {printf("too big\n"); return false;}
-    else if (!isalpha(token[0])) {printf("variable not alphabetic\n"); return false;}
+    } else if (strlen(token) > 1) {/*printf("too big\n"); */return false;}
+    else if (!isalpha(token[0])) {/*printf("variable not alphabetic\n"); */return false;}
     else {
         int first_idx = token[0] - 'a';
+        //3.2
+        // first_value = get_session(session_id).values[first_idx];
         first_value = session_list[session_id].values[first_idx];
     }
 
     // Processes the operation symbol.
     token = strtok(NULL, " ");
     if (token == NULL) {
+        //3.2
+        // session_t temp;
+        // temp = get_session(session_id);
+        // temp.variables[result_idx] = true;
+        // temp.values[result_idx] = first_value;
+        // e.data = &temp;
+        // e.key = session_id;
+        // hsearch(e, ENTER);
         session_list[session_id].variables[result_idx] = true;
         session_list[session_id].values[result_idx] = first_value;
         return true;
     }
-    if (strlen(token) > 1) {printf("too big\n"); return false;}
+    if (strlen(token) > 1) {/*printf("too big\n"); */return false;}
     
     symbol = token[0];
 
     // Processes the second variable/value.
     token = strtok(NULL, " ");
-    if (token == NULL) {printf("second variable/value null\n");return false;}
+    if (token == NULL) {/*printf("second variable/value null\n"); */return false;}
     if (is_str_numeric(token)) {
         second_value = strtod(token, NULL);
-    } else if (strlen(token) > 1) {printf("too big\n"); return false;}
-    else if (!isalpha(token[0])) {printf("variable not alphabetic\n"); return false;}
+    } else if (strlen(token) > 1) {/*printf("too big\n"); */return false;}
+    else if (!isalpha(token[0])) {/*printf("variable not alphabetic\n"); */return false;}
     else {
         int second_idx = token[0] - 'a';
+        //3.2
+        // second_value = get_session(session_id).values[second_idx];
         second_value = session_list[session_id].values[second_idx];
     }
 
     // No data should be left over thereafter.
     token = strtok(NULL, " ");
-    if (token != NULL) {printf("too many things\n"); return false;}
+    if (token != NULL) {/*printf("too many things\n"); */return false;}
 
-
+    //3.2
+    // session_t temp;
+    // temp = get_session(session_id);
+    // temp.variables[result_idx] = true;
     session_list[session_id].variables[result_idx] = true;
 
     if (symbol == '+') {
+        // temp.values[result_idx] = first_value + second_value;
         session_list[session_id].values[result_idx] = first_value + second_value;
     } else if (symbol == '-') {
+        // temp.values[result_idx] = first_value - second_value;
         session_list[session_id].values[result_idx] = first_value - second_value;
     } else if (symbol == '*') {
+        // temp.values[result_idx] = first_value * second_value;
         session_list[session_id].values[result_idx] = first_value * second_value;
     } else if (symbol == '/') {
+        // temp.values[result_idx] = first_value / second_value;
         session_list[session_id].values[result_idx] = first_value / second_value;
-    } else {printf("not a valid operator\n"); return false;}
+    } else {/*printf("not a valid operator\n"); */return false;}
+    // e.data = &temp;
+    // e.key = session_id;
+    // hsearch(e, ENTER);
 
     return true;
 }
@@ -262,18 +315,25 @@ void load_all_sessions() {
     // Hint: Use get_session_file_path() to get the file path for each session.
     //       Don't forget to load all of sessions on the disk.
     //max_sessions = 128
-    printf("loading\n");
+    //printf("loading\n");
     for (int i=0;i<128;i++) {
         char path[80];
         get_session_file_path(i, path);
         FILE * fp = fopen(path+2, "r");
         if (fp != NULL) {
-            printf("%d exists on disk\n", i);
+            //printf("%d exists on disk\n", i);
+            //3.2
+            // e.key = (char *)i;
+            // session_t session;
+            // fread(&session, sizeof(struct session_struct), 1, fp);
+            // fclose(fp);
+            // e.data = &session;
+            // hsearch(e, ENTER);
             fread(&session_list[i], sizeof(struct session_struct), 1, fp);
             fclose(fp);
             for (int j=0;j<sizeof(session_list[i].values) / sizeof(session_list[i].values[0]);j++) {
-                if (session_list[i].variables[j])
-                    printf("loaded value %d for %d: %f\n", j, i, session_list[i].values[j]);
+                // if (session_list[i].variables[j])
+                //     printf("loaded value %d for %d: %f\n", j, i, session_list[i].values[j]);
             }
         }
     }
@@ -287,18 +347,21 @@ void load_all_sessions() {
 void save_session(int session_id) {
     // TODO: For Part 1.1, write your file operation code here.
     // Hint: Use get_session_file_path() to get the file path for each session.
-    printf("saving session\n");
+    // printf("saving session\n");
     char path[80];
     get_session_file_path(session_id, path);
     FILE *fp = fopen(path+2, "w");
     if (fp == NULL ) {
-        fprintf(stderr, "Couldn't open %s\n", path+2);
+        // printf("Couldn't open %s\n", path+2);
         exit(1);
     }
     // //fputs(session_data, fp);
+    //3.2
+    // session_t session = get_session(session_id);
+    // fwrite(&session, sizeof(session), 1, fp);
     fwrite(&session_list[session_id], sizeof(session_list[session_id]), 1, fp);
     fclose(fp);
-    printf("placed data\n");
+    // printf("placed data\n");
 }
 
 /**
@@ -330,6 +393,31 @@ int register_browser(int browser_socket_fd) {
     int session_id = strtol(message, NULL, 10);
     if (session_id == -1) {
         for (int i = 0; i < NUM_SESSIONS; ++i) {
+            //3.2
+            // //TODO make random
+            // // session_t temp = get_session(i);
+            // session_t session = get_session(i);
+            // // session.in_use = temp.in_use;
+            // // if (temp != NULL) {
+            // // session_t session = &temp;
+            // if (!session.in_use) {
+            //     session_id = i;
+            //     session.in_use = true;
+            //     e.key = session_id;
+            //     e.data = &session;
+            //     hsearch(e, ENTER);
+            //     break;
+            //     }
+            // // } else {
+            // //     session_t session;
+            // //     printf("not found\n");
+            // //     session_id = i;
+            // //     session.in_use = true;
+            // //     e.key = session_id;
+            // //     e.data = &session;
+            // //     hsearch(e, ENTER);
+            // //     break;
+            // // }
             if (!session_list[i].in_use) {
                 session_id = i;
                 session_list[session_id].in_use = true;
@@ -465,6 +553,9 @@ void start_server(int port) {
  * @return exit code
  */
 int main(int argc, char *argv[]) {
+    //Part 3.2 here
+    // if (hcreate(NUM_BROWSER*2) == 0) {printf("Could not create hashmap\n");};
+
     int port = DEFAULT_PORT;
 
     if (argc == 1) {
